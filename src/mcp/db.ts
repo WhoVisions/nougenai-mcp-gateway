@@ -1,20 +1,39 @@
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 
-// Ensure data directory exists
+// Ensure data directory exists safely
 const dataDir = path.join(process.cwd(), "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn("[MCP DB] Could not create data directory, assuming read-only environment or existing structure.");
 }
 
 // Determine DB path
-const dbPath = process.env.NOUGEN_MEMORY_DB || path.join(dataDir, "nougen_memory.sqlite");
+const dbPath = process.env.NOUGEN_MEMORY_DB || path.join(dataDir, "nougen_memory_v2.sqlite");
 
-// Initialize database
-export const db = new Database(dbPath, {
+let SQLiteDB: any = null;
+try {
+  SQLiteDB = require("better-sqlite3");
+} catch (err) {
+  console.warn("[MCP DB] better-sqlite3 not available in this environment. Database operations will fail or need fallback.");
+}
+
+// Initialize database safely
+export const db = SQLiteDB ? new SQLiteDB(dbPath, {
   // verbose: console.log
-});
+}) : {
+  pragma: () => {},
+  exec: () => {},
+  prepare: () => ({ run: () => {}, all: () => [], get: () => null })
+} as any;
+
+db.pragma("journal_mode = WAL");
+db.pragma("busy_timeout = 5000");
+db.pragma("synchronous = NORMAL");
 
 // Initialize tables
 function initDb() {
@@ -24,6 +43,8 @@ function initDb() {
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       tags TEXT NOT NULL,
+      canon_link TEXT NOT NULL,
+      agent_origin TEXT NOT NULL,
       timestamp TEXT NOT NULL
     );
 
@@ -32,22 +53,28 @@ function initDb() {
       title,
       body,
       tags,
+      canon_link,
+      agent_origin,
       content='build_notes',
       content_rowid='rowid'
     );
 
     -- Triggers to keep FTS table in sync
     CREATE TRIGGER IF NOT EXISTS build_notes_ai AFTER INSERT ON build_notes BEGIN
-      INSERT INTO build_notes_fts(rowid, title, body, tags) VALUES (new.rowid, new.title, new.body, new.tags);
+      INSERT INTO build_notes_fts(rowid, title, body, tags, canon_link, agent_origin) 
+      VALUES (new.rowid, new.title, new.body, new.tags, new.canon_link, new.agent_origin);
     END;
     
     CREATE TRIGGER IF NOT EXISTS build_notes_ad AFTER DELETE ON build_notes BEGIN
-      INSERT INTO build_notes_fts(build_notes_fts, rowid, title, body, tags) VALUES('delete', old.rowid, old.title, old.body, old.tags);
+      INSERT INTO build_notes_fts(build_notes_fts, rowid, title, body, tags, canon_link, agent_origin) 
+      VALUES('delete', old.rowid, old.title, old.body, old.tags, old.canon_link, old.agent_origin);
     END;
     
     CREATE TRIGGER IF NOT EXISTS build_notes_au AFTER UPDATE ON build_notes BEGIN
-      INSERT INTO build_notes_fts(build_notes_fts, rowid, title, body, tags) VALUES('delete', old.rowid, old.title, old.body, old.tags);
-      INSERT INTO build_notes_fts(rowid, title, body, tags) VALUES (new.rowid, new.title, new.body, new.tags);
+      INSERT INTO build_notes_fts(build_notes_fts, rowid, title, body, tags, canon_link, agent_origin) 
+      VALUES('delete', old.rowid, old.title, old.body, old.tags, old.canon_link, old.agent_origin);
+      INSERT INTO build_notes_fts(rowid, title, body, tags, canon_link, agent_origin) 
+      VALUES (new.rowid, new.title, new.body, new.tags, new.canon_link, new.agent_origin);
     END;
   `);
 }
@@ -59,13 +86,16 @@ export interface BuildNote {
   title: string;
   body: string;
   tags: string[];
+  canon_link: string;
+  agent_origin: string;
   timestamp: string;
 }
 
+
 export function saveBuildNote(note: BuildNote): void {
   const stmt = db.prepare(`
-    INSERT INTO build_notes (id, title, body, tags, timestamp)
-    VALUES (@id, @title, @body, @tags, @timestamp)
+    INSERT INTO build_notes (id, title, body, tags, canon_link, agent_origin, timestamp)
+    VALUES (@id, @title, @body, @tags, @canon_link, @agent_origin, @timestamp)
   `);
   
   stmt.run({
@@ -73,9 +103,12 @@ export function saveBuildNote(note: BuildNote): void {
     title: note.title,
     body: note.body,
     tags: JSON.stringify(note.tags),
+    canon_link: note.canon_link,
+    agent_origin: note.agent_origin,
     timestamp: note.timestamp
   });
 }
+
 
 export function searchBuildNotes(query: string): BuildNote[] {
   const stmt = db.prepare(`
@@ -83,7 +116,7 @@ export function searchBuildNotes(query: string): BuildNote[] {
     WHERE rowid IN (
       SELECT rowid FROM build_notes_fts WHERE build_notes_fts MATCH @query ORDER BY rank
     )
-    LIMIT 20
+    LIMIT 8
   `);
   
   // Quote query to prevent FTS5 syntax errors on punctuation
