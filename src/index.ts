@@ -4,7 +4,8 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { server } from "./server.js";
 
 const app = express();
-const port = 8787;
+// Respect the platform-injected PORT (Cloud Run, Heroku, etc.); fall back to 8787 for local dev.
+const port = Number(process.env.PORT) || 8787;
 
 app.get("/health", (req, res) => {
   res.json({
