@@ -5,13 +5,20 @@ import { ECOSYSTEM_MAP } from "../nougen/ecosystem.js";
 import { getSiteContext } from "../nougen/sites.js";
 import { NOUGEN_Q_SPEC } from "../nougen/products.js";
 import { HARDCADE_CONTEXT } from "../nougen/worlds.js";
-import { 
-  GetSiteContextArgsSchema, 
-  GenerateSiteMetadataArgsSchema, 
+import { SWITCHBOARD_SKILLS } from "../nougen/switchboardSkills.js";
+import { classifyUpstreamFailure, nextBackoffSeconds, planRoute } from "../nougen/switchboard.js";
+import {
+  GetSiteContextArgsSchema,
+  GenerateSiteMetadataArgsSchema,
   GenerateBrandCopyArgsSchema,
   SaveBuildNoteArgsSchema,
   SearchBuildNotesArgsSchema
 } from "./schemas.js";
+import {
+  ClassifyUpstreamFailureArgsSchema,
+  NextBackoffArgsSchema,
+  PlanRouteArgsSchema
+} from "./switchboardSchemas.js";
 import { saveBuildNote, searchBuildNotes } from "./db.js";
 
 export function registerTools(server: Server) {
@@ -57,6 +64,26 @@ export function registerTools(server: Server) {
           name: "nougen_search_build_notes",
           description: "Searches local build notes using FTS5.",
           inputSchema: zodToJsonSchema(SearchBuildNotesArgsSchema)
+        },
+        {
+          name: "nougen_plan_route",
+          description: "Plans an account-aware provider and model route using health, quota, cooldown, protocol, capability, background-work, and premium-reserve signals. Returns provenance without exposing credentials.",
+          inputSchema: zodToJsonSchema(PlanRouteArgsSchema)
+        },
+        {
+          name: "nougen_classify_upstream_failure",
+          description: "Classifies an upstream AI provider failure and returns the bounded recovery action NouGen should take.",
+          inputSchema: zodToJsonSchema(ClassifyUpstreamFailureArgsSchema)
+        },
+        {
+          name: "nougen_next_backoff",
+          description: "Returns the configured adaptive circuit-breaker delay for a retry attempt.",
+          inputSchema: zodToJsonSchema(NextBackoffArgsSchema)
+        },
+        {
+          name: "nougen_get_switchboard_skills",
+          description: "Returns the NouGen Switchboard skill manifest for smart routing, self-healing, quota protection, protocol bridging, context fitting, diagnosis, and safe client sync.",
+          inputSchema: { type: "object", properties: {} }
         }
       ]
     };
@@ -98,8 +125,27 @@ export function registerTools(server: Server) {
         return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
       }
 
+      if (name === "nougen_plan_route") {
+        const input = PlanRouteArgsSchema.parse(args);
+        return { content: [{ type: "text", text: JSON.stringify(planRoute(input), null, 2) }] };
+      }
+
+      if (name === "nougen_classify_upstream_failure") {
+        const input = ClassifyUpstreamFailureArgsSchema.parse(args);
+        return { content: [{ type: "text", text: JSON.stringify(classifyUpstreamFailure(input), null, 2) }] };
+      }
+
+      if (name === "nougen_next_backoff") {
+        const { attempt, steps } = NextBackoffArgsSchema.parse(args);
+        return { content: [{ type: "text", text: JSON.stringify({ attempt, seconds: nextBackoffSeconds(attempt, steps) }, null, 2) }] };
+      }
+
+      if (name === "nougen_get_switchboard_skills") {
+        return { content: [{ type: "text", text: JSON.stringify(SWITCHBOARD_SKILLS, null, 2) }] };
+      }
+
       if (name === "nougen_generate_site_metadata" || name === "nougen_generate_brand_copy") {
-         return { content: [{ type: "text", text: `Tool ${name} executed successfully. Generated placeholder content based on arguments.` }] };
+        return { content: [{ type: "text", text: `Tool ${name} executed successfully. Generated placeholder content based on arguments.` }] };
       }
 
       throw new Error(`Tool not found: ${name}`);
