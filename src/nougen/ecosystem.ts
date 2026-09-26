@@ -13,3 +13,12 @@ export const ECOSYSTEM_MAP = {
   worlds: ["Hardcade", "VeilVerse"],
   sites: ["WhoVisions", "WhoVisions Presents", "Ai with Dav3", "NouGenAI", "Learn with Mrs B", "Goddexx Snow", "Liv The Moment"]
 };
+
+export const BRAND_PILLARS = [
+  "Website Deployment",
+  "Photography & Projects",
+  "AI Experiments",
+  "Social Media",
+  "Brand Identity"
+];
+

@@ -1,6 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ListResourcesRequestSchema, ReadResourceRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { BRAND_MISSION } from "../nougen/ecosystem.js";
+import { BRAND_MISSION, ECOSYSTEM_MAP } from "../nougen/ecosystem.js";
 import { NOUGEN_Q_SPEC } from "../nougen/products.js";
 import { HARDCADE_CONTEXT, VEILVERSE_CONTEXT } from "../nougen/worlds.js";
 import { SITES } from "../nougen/sites.js";
@@ -55,6 +55,7 @@ export function registerResources(server: Server) {
     let content: any = null;
 
     if (uri === "nougen://brand/mission") content = BRAND_MISSION;
+    else if (uri === "nougen://brand/ecosystem-map") content = ECOSYSTEM_MAP;
     else if (uri === "nougen://products/nougen-q") content = NOUGEN_Q_SPEC;
     else if (uri === "nougen://worlds/hardcade") content = HARDCADE_CONTEXT;
     else if (uri === "nougen://worlds/veilverse") content = VEILVERSE_CONTEXT;

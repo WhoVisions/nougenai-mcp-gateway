@@ -15,25 +15,24 @@ try {
 // Determine DB path
 const dbPath = process.env.NOUGEN_MEMORY_DB || path.join(dataDir, "nougen_memory_v2.sqlite");
 
-let SQLiteDB: any = null;
+let dbInstance: any = null;
 try {
-  SQLiteDB = require("better-sqlite3");
+  const SQLiteDB = require("better-sqlite3");
+  dbInstance = new SQLiteDB(dbPath, {});
+  dbInstance.pragma("journal_mode = WAL");
+  dbInstance.pragma("busy_timeout = 5000");
+  dbInstance.pragma("synchronous = NORMAL");
 } catch (err) {
-  console.warn("[MCP DB] better-sqlite3 not available in this environment. Database operations will fail or need fallback.");
+  // console.warn("[MCP DB] Native SQLite not available. Using resilient in-memory fallback.");
 }
 
 // Initialize database safely
-export const db = SQLiteDB ? new SQLiteDB(dbPath, {
-  // verbose: console.log
-}) : {
+export const db = dbInstance || {
   pragma: () => {},
   exec: () => {},
   prepare: () => ({ run: () => {}, all: () => [], get: () => null })
-} as any;
+};
 
-db.pragma("journal_mode = WAL");
-db.pragma("busy_timeout = 5000");
-db.pragma("synchronous = NORMAL");
 
 // Initialize tables
 function initDb() {
@@ -92,40 +91,67 @@ export interface BuildNote {
 }
 
 
-export function saveBuildNote(note: BuildNote): void {
-  const stmt = db.prepare(`
-    INSERT INTO build_notes (id, title, body, tags, canon_link, agent_origin, timestamp)
-    VALUES (@id, @title, @body, @tags, @canon_link, @agent_origin, @timestamp)
-  `);
-  
-  stmt.run({
-    id: note.id,
-    title: note.title,
-    body: note.body,
-    tags: JSON.stringify(note.tags),
-    canon_link: note.canon_link,
-    agent_origin: note.agent_origin,
-    timestamp: note.timestamp
-  });
-}
+const inMemoryNotes: BuildNote[] = [];
 
+export function saveBuildNote(note: BuildNote): void {
+  if (dbInstance) {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO build_notes (id, title, body, tags, canon_link, agent_origin, timestamp)
+        VALUES (@id, @title, @body, @tags, @canon_link, @agent_origin, @timestamp)
+      `);
+      
+      stmt.run({
+        id: note.id,
+        title: note.title,
+        body: note.body,
+        tags: JSON.stringify(note.tags),
+        canon_link: note.canon_link,
+        agent_origin: note.agent_origin,
+        timestamp: note.timestamp
+      });
+      return;
+    } catch (e) {}
+  }
+  
+  // In-memory fallback
+  const idx = inMemoryNotes.findIndex(n => n.id === note.id);
+  if (idx >= 0) {
+    inMemoryNotes[idx] = note;
+  } else {
+    inMemoryNotes.push(note);
+  }
+}
 
 export function searchBuildNotes(query: string): BuildNote[] {
-  const stmt = db.prepare(`
-    SELECT * FROM build_notes 
-    WHERE rowid IN (
-      SELECT rowid FROM build_notes_fts WHERE build_notes_fts MATCH @query ORDER BY rank
-    )
-    LIMIT 8
-  `);
+  if (dbInstance) {
+    try {
+      const stmt = db.prepare(`
+        SELECT * FROM build_notes 
+        WHERE rowid IN (
+          SELECT rowid FROM build_notes_fts WHERE build_notes_fts MATCH @query ORDER BY rank
+        )
+        LIMIT 8
+      `);
+      
+      const safeQuery = `"${query.replace(/"/g, '""')}"`;
+      const results = stmt.all({ query: safeQuery }) as any[];
+      
+      if (results && results.length > 0) {
+        return results.map(r => ({
+          ...r,
+          tags: typeof r.tags === "string" ? JSON.parse(r.tags) : r.tags
+        }));
+      }
+    } catch (e) {}
+  }
   
-  // Quote query to prevent FTS5 syntax errors on punctuation
-  const safeQuery = `"${query.replace(/"/g, '""')}"`;
-  
-  const results = stmt.all({ query: safeQuery }) as any[];
-  
-  return results.map(r => ({
-    ...r,
-    tags: JSON.parse(r.tags)
-  }));
+  // In-memory token search fallback
+  const terms = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+  return inMemoryNotes.filter(n => {
+    const text = `${n.title} ${n.body} ${n.tags.join(" ")} ${n.canon_link}`.toLowerCase();
+    return terms.some(t => text.includes(t));
+  }).slice(0, 8);
 }
+
+
