@@ -13,13 +13,18 @@ import {
   SearchBuildNotesArgsSchema,
   GetSmiStatusArgsSchema,
   NouGenContextModeArgsSchema,
-  Dav1dExecBridgeArgsSchema
+  Dav1dExecBridgeArgsSchema,
+  NouGenMsgSearchArgsSchema,
+  ShardsRecallArgsSchema
 } from "./schemas.js";
 import { saveBuildNote, searchBuildNotes } from "./db.js";
 import { resolveContextPacket } from "../nougen/context_packet.js";
 import { executeDav1dCommand } from "../nougen/dav1d_bridge.js";
+import { searchNouGenMessages } from "../nougen/nougenmsg.js";
+import { performScopedRecall } from "../nougen/federation.js";
 import fs from "node:fs";
 import path from "node:path";
+
 
 
 export function registerTools(server: Server) {
@@ -85,11 +90,22 @@ export function registerTools(server: Server) {
           name: "nougen_dav1d_exec",
           description: "Executes CLI commands via Dav1d bridge with strict hierarchical argv preservation and typed contract verification.",
           inputSchema: zodToJsonSchema(Dav1dExecBridgeArgsSchema)
+        },
+        {
+          name: "nougenmsg_search",
+          description: "Searches across multi-inbox fleet messages with sender, target, and keyword filtering.",
+          inputSchema: zodToJsonSchema(NouGenMsgSearchArgsSchema)
+        },
+        {
+          name: "shards_recall",
+          description: "Performs truthful scoped federation recall across local and peer memory stores.",
+          inputSchema: zodToJsonSchema(ShardsRecallArgsSchema)
         }
       ]
 
     };
   });
+
 
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -229,7 +245,25 @@ export function registerTools(server: Server) {
         return { content: [{ type: "text", text: JSON.stringify(receipt, null, 2) }] };
       }
 
+      if (name === "nougenmsg_search") {
+        const parsed = NouGenMsgSearchArgsSchema.parse(args);
+        const results = searchNouGenMessages({
+          query: parsed.query,
+          sender: parsed.sender,
+          target: parsed.target,
+          limit: parsed.limit
+        });
+        return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+      }
+
+      if (name === "shards_recall") {
+        const parsed = ShardsRecallArgsSchema.parse(args);
+        const results = performScopedRecall(parsed.query, parsed.limit);
+        return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+      }
+
       throw new Error(`Tool not found: ${name}`);
+
     } catch (error: any) {
       return {
         content: [{ type: "text", text: `Error executing tool ${name}: ${error.message}` }],

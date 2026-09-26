@@ -67,4 +67,17 @@ export const Dav1dExecBridgeArgsSchema = z.object({
   request_id: z.string().optional().describe("Correlation request ID")
 });
 
+export const NouGenMsgSearchArgsSchema = z.object({
+  query: z.string().optional().describe("Search keywords in message text"),
+  sender: z.string().optional().describe("Filter by sender or origin node"),
+  target: z.string().optional().describe("Filter by target receiver"),
+  limit: z.number().optional().default(10).describe("Maximum messages to return")
+});
+
+export const ShardsRecallArgsSchema = z.object({
+  query: z.string().describe("Context or shard query"),
+  limit: z.number().optional().default(5).describe("Maximum shards to retrieve")
+});
+
+
 
