@@ -49,3 +49,16 @@ Add the following to your `mcpServers` configuration:
 - [ ] Connect to Notion for real-time memory retrieval
 - [ ] Add Wispr and local-file connectors
 - [ ] Implement Bayesian reranker for semantic search
+
+<!-- nougen:fleet-role:begin (generated from nougen-handoffs fleet/manifest.json; edit the manifest, not this block) -->
+## Fleet role
+
+| | |
+|---|---|
+| Role | UNDECLARED (MCP gateway; overlaps fleet-mcp / mcp-server) |
+| Kind | infra |
+| Status | undeclared |
+| Canonical for | — |
+| Visibility | public |
+
+<!-- nougen:fleet-role:end -->
