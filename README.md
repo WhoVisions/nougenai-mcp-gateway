@@ -50,7 +50,7 @@ Add the following to your `mcpServers` configuration:
 - [ ] Add Wispr and local-file connectors
 - [ ] Implement Bayesian reranker for semantic search
 
-<!-- nougen:fleet-role:begin (generated from nougen-handoffs fleet/manifest.json; edit the manifest, not this block) -->
+<!-- nougen:fleet-role:begin (generated from NouGenRelay fleet/manifest.json; edit the manifest, not this block) -->
 ## Fleet role
 
 | | |
